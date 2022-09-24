@@ -366,6 +366,13 @@ impl<T: RealNumber, M: Matrix<T>> CategoricalNB<T, M> {
         self.inner.predict(x)
     }
 
+    /// Estimates the probablities of each class labels for the provided data.
+    /// * `x` - data of shape NxM where N is number of data points to estimate and M is number of features.
+    /// Returns a 2d vector of shape (N, n_classes).
+    pub fn predict_probs(&self, x: &M) -> Result<(&Vec<T>, M), Failed> {
+        self.inner.predict_probs(x)
+    }
+
     /// Class labels known to the classifier.
     /// Returns a vector of size n_classes.
     pub fn classes(&self) -> &Vec<T> {

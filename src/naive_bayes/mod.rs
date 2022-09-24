@@ -102,6 +102,32 @@ impl<T: RealNumber, M: Matrix<T>, D: NBDistribution<T, M>> BaseNaiveBayes<T, M, 
         let y_hat = M::RowVector::from_array(&predictions);
         Ok(y_hat)
     }
+
+    /// Estimates the log probablities of each class labels for the provided data.
+    /// * `x` - data of shape NxM where N is number of data points to estimate and M is number of features.
+    /// Returns a 2d vector of shape (N, n_classes).
+    pub fn predict_probs(&self, x: &M) -> Result<(&Vec<T>, M), Failed> {
+        let y_classes = self.distribution.classes();
+        let (rows, _) = x.shape();
+        let predictions = (0..rows)
+            .map(|row_index| {
+                let row = x.get_row(row_index);
+                let row_predictions = y_classes
+                    .iter()
+                    .enumerate()
+                    .map(|(class_index, _)| {
+                        self.distribution.log_likelihood(class_index, &row)
+                            + self.distribution.prior(class_index).ln()
+                    })
+                    .collect::<Vec<T>>();
+                M::RowVector::from_array(&row_predictions)
+            })
+            .collect::<Vec<M::RowVector>>();
+        match M::from_row_vectors(predictions) {
+            Some(y_probs) => Ok((y_classes, y_probs)),
+            None => Err(Failed::predict("unknown error in predict_probs()")),
+        }
+    }
 }
 pub mod bernoulli;
 pub mod categorical;
