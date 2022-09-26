@@ -385,6 +385,12 @@ impl<T: RealNumber, M: Matrix<T>> CategoricalNB<T, M> {
         &self.inner.distribution.class_count
     }
 
+    /// probability of each class.
+    /// Returns a vector of size n_classes.
+    pub fn class_priors(&self) -> &Vec<T> {
+        &self.inner.distribution.class_priors
+    }
+
     /// Number of features of each sample
     pub fn n_features(&self) -> usize {
         self.inner.distribution.n_features
@@ -401,6 +407,7 @@ impl<T: RealNumber, M: Matrix<T>> CategoricalNB<T, M> {
     pub fn category_count(&self) -> &Vec<Vec<Vec<usize>>> {
         &self.inner.distribution.category_count
     }
+
     /// Holds arrays of shape (n_classes, n_categories of respective feature)
     /// for each feature. Each array provides the empirical log probability
     /// of categories given the respective feature and class, ``P(x_i|y)``.
