@@ -1,11 +1,11 @@
 //! # KFold
 //!
 //! Defines k-fold cross validator.
+use std::fmt::{Debug, Display};
 
-use crate::linalg::Matrix;
-use crate::math::num::RealNumber;
+use crate::linalg::basic::arrays::Array2;
 use crate::model_selection::BaseKFold;
-use crate::rand::get_rng_impl;
+use crate::rand_custom::get_rng_impl;
 use rand::seq::SliceRandom;
 
 /// K-Folds cross-validator
@@ -20,7 +20,10 @@ pub struct KFold {
 }
 
 impl KFold {
-    fn test_indices<T: RealNumber, M: Matrix<T>>(&self, x: &M) -> Vec<Vec<usize>> {
+    fn test_indices<T: Debug + Display + Copy + Sized, M: Array2<T>>(
+        &self,
+        x: &M,
+    ) -> Vec<Vec<usize>> {
         // number of samples (rows) in the matrix
         let n_samples: usize = x.shape().0;
 
@@ -51,7 +54,7 @@ impl KFold {
         return_values
     }
 
-    fn test_masks<T: RealNumber, M: Matrix<T>>(&self, x: &M) -> Vec<Vec<bool>> {
+    fn test_masks<T: Debug + Display + Copy + Sized, M: Array2<T>>(&self, x: &M) -> Vec<Vec<bool>> {
         let mut return_values: Vec<Vec<bool>> = Vec::with_capacity(self.n_splits);
         for test_index in self.test_indices(x).drain(..) {
             // init mask
@@ -71,7 +74,7 @@ impl Default for KFold {
         KFold {
             n_splits: 3,
             shuffle: true,
-            seed: None,
+            seed: Option::None,
         }
     }
 }
@@ -134,7 +137,7 @@ impl BaseKFold for KFold {
         self.n_splits
     }
 
-    fn split<T: RealNumber, M: Matrix<T>>(&self, x: &M) -> Self::Output {
+    fn split<T: Debug + Display + Copy + Sized, M: Array2<T>>(&self, x: &M) -> Self::Output {
         if self.n_splits < 2 {
             panic!("Number of splits is too small: {}", self.n_splits);
         }
@@ -154,15 +157,18 @@ impl BaseKFold for KFold {
 mod tests {
 
     use super::*;
-    use crate::linalg::naive::dense_matrix::*;
+    use crate::linalg::basic::matrix::DenseMatrix;
 
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+    #[cfg_attr(
+        all(target_arch = "wasm32", not(target_os = "wasi")),
+        wasm_bindgen_test::wasm_bindgen_test
+    )]
     #[test]
     fn run_kfold_return_test_indices_simple() {
         let k = KFold {
             n_splits: 3,
             shuffle: false,
-            seed: None,
+            seed: Option::None,
         };
         let x: DenseMatrix<f64> = DenseMatrix::rand(33, 100);
         let test_indices = k.test_indices(&x);
@@ -172,13 +178,16 @@ mod tests {
         assert_eq!(test_indices[2], (22..33).collect::<Vec<usize>>());
     }
 
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+    #[cfg_attr(
+        all(target_arch = "wasm32", not(target_os = "wasi")),
+        wasm_bindgen_test::wasm_bindgen_test
+    )]
     #[test]
     fn run_kfold_return_test_indices_odd() {
         let k = KFold {
             n_splits: 3,
             shuffle: false,
-            seed: None,
+            seed: Option::None,
         };
         let x: DenseMatrix<f64> = DenseMatrix::rand(34, 100);
         let test_indices = k.test_indices(&x);
@@ -188,40 +197,46 @@ mod tests {
         assert_eq!(test_indices[2], (23..34).collect::<Vec<usize>>());
     }
 
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+    #[cfg_attr(
+        all(target_arch = "wasm32", not(target_os = "wasi")),
+        wasm_bindgen_test::wasm_bindgen_test
+    )]
     #[test]
     fn run_kfold_return_test_mask_simple() {
         let k = KFold {
             n_splits: 2,
             shuffle: false,
-            seed: None,
+            seed: Option::None,
         };
         let x: DenseMatrix<f64> = DenseMatrix::rand(22, 100);
         let test_masks = k.test_masks(&x);
 
         for t in &test_masks[0][0..11] {
             // TODO: this can be prob done better
-            assert_eq!(*t, true)
+            assert!(*t)
         }
         for t in &test_masks[0][11..22] {
-            assert_eq!(*t, false)
+            assert!(!*t)
         }
 
         for t in &test_masks[1][0..11] {
-            assert_eq!(*t, false)
+            assert!(!*t)
         }
         for t in &test_masks[1][11..22] {
-            assert_eq!(*t, true)
+            assert!(*t)
         }
     }
 
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+    #[cfg_attr(
+        all(target_arch = "wasm32", not(target_os = "wasi")),
+        wasm_bindgen_test::wasm_bindgen_test
+    )]
     #[test]
     fn run_kfold_return_split_simple() {
         let k = KFold {
             n_splits: 2,
             shuffle: false,
-            seed: None,
+            seed: Option::None,
         };
         let x: DenseMatrix<f64> = DenseMatrix::rand(22, 100);
         let train_test_splits: Vec<(Vec<usize>, Vec<usize>)> = k.split(&x).collect();
@@ -232,7 +247,10 @@ mod tests {
         assert_eq!(train_test_splits[1].1, (11..22).collect::<Vec<usize>>());
     }
 
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+    #[cfg_attr(
+        all(target_arch = "wasm32", not(target_os = "wasi")),
+        wasm_bindgen_test::wasm_bindgen_test
+    )]
     #[test]
     fn run_kfold_return_split_simple_shuffle() {
         let k = KFold {
@@ -248,13 +266,16 @@ mod tests {
         assert_eq!(train_test_splits[1].1.len(), 11_usize);
     }
 
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+    #[cfg_attr(
+        all(target_arch = "wasm32", not(target_os = "wasi")),
+        wasm_bindgen_test::wasm_bindgen_test
+    )]
     #[test]
     fn numpy_parity_test() {
         let k = KFold {
             n_splits: 3,
             shuffle: false,
-            seed: None,
+            seed: Option::None,
         };
         let x: DenseMatrix<f64> = DenseMatrix::rand(10, 4);
         let expected: Vec<(Vec<usize>, Vec<usize>)> = vec![
@@ -270,7 +291,10 @@ mod tests {
         }
     }
 
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+    #[cfg_attr(
+        all(target_arch = "wasm32", not(target_os = "wasi")),
+        wasm_bindgen_test::wasm_bindgen_test
+    )]
     #[test]
     fn numpy_parity_test_shuffle() {
         let k = KFold {

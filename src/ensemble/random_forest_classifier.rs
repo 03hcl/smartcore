@@ -8,7 +8,7 @@
 //! Example:
 //!
 //! ```
-//! use smartcore::linalg::naive::dense_matrix::*;
+//! use smartcore::linalg::basic::matrix::DenseMatrix;
 //! use smartcore::ensemble::random_forest_classifier::RandomForestClassifier;
 //!
 //! // Iris dataset
@@ -35,8 +35,8 @@
 //!              &[5.2, 2.7, 3.9, 1.4],
 //!         ]);
 //! let y = vec![
-//!              0., 0., 0., 0., 0., 0., 0., 0.,
-//!              1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1.,
+//!              0, 0, 0, 0, 0, 0, 0, 0,
+//!              1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
 //!         ];
 //!
 //! let classifier = RandomForestClassifier::fit(&x, &y, Default::default()).unwrap();
@@ -55,9 +55,11 @@ use serde::{Deserialize, Serialize};
 
 use crate::api::{Predictor, SupervisedEstimator};
 use crate::error::{Failed, FailedError};
-use crate::linalg::Matrix;
-use crate::math::num::RealNumber;
-use crate::rand::get_rng_impl;
+use crate::linalg::basic::arrays::{Array1, Array2};
+use crate::numbers::basenum::Number;
+use crate::numbers::floatnum::FloatNumber;
+
+use crate::rand_custom::get_rng_impl;
 use crate::tree::decision_tree_classifier::{
     which_max, DecisionTreeClassifier, DecisionTreeClassifierParameters, SplitCriterion,
 };
@@ -96,10 +98,14 @@ pub struct RandomForestClassifierParameters {
 /// Random Forest Classifier
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Debug)]
-pub struct RandomForestClassifier<T: RealNumber> {
-    _parameters: RandomForestClassifierParameters,
-    trees: Vec<DecisionTreeClassifier<T>>,
-    classes: Vec<T>,
+pub struct RandomForestClassifier<
+    TX: Number + FloatNumber + PartialOrd,
+    TY: Number + Ord,
+    X: Array2<TX>,
+    Y: Array1<TY>,
+> {
+    trees: Option<Vec<DecisionTreeClassifier<TX, TY, X, Y>>>,
+    classes: Option<Vec<TY>>,
     samples: Option<Vec<Vec<bool>>>,
 }
 
@@ -148,22 +154,24 @@ impl RandomForestClassifierParameters {
     }
 }
 
-impl<T: RealNumber> PartialEq for RandomForestClassifier<T> {
+impl<TX: Number + FloatNumber + PartialOrd, TY: Number + Ord, X: Array2<TX>, Y: Array1<TY>>
+    PartialEq for RandomForestClassifier<TX, TY, X, Y>
+{
     fn eq(&self, other: &Self) -> bool {
-        if self.classes.len() != other.classes.len() || self.trees.len() != other.trees.len() {
+        if self.classes.as_ref().unwrap().len() != other.classes.as_ref().unwrap().len()
+            || self.trees.as_ref().unwrap().len() != other.trees.as_ref().unwrap().len()
+        {
             false
         } else {
-            for i in 0..self.classes.len() {
-                if (self.classes[i] - other.classes[i]).abs() > T::epsilon() {
-                    return false;
-                }
-            }
-            for i in 0..self.trees.len() {
-                if self.trees[i] != other.trees[i] {
-                    return false;
-                }
-            }
-            true
+            self.classes
+                .iter()
+                .zip(other.classes.iter())
+                .all(|(a, b)| a == b)
+                && self
+                    .trees
+                    .iter()
+                    .zip(other.trees.iter())
+                    .all(|(a, b)| a == b)
         }
     }
 }
@@ -172,7 +180,7 @@ impl Default for RandomForestClassifierParameters {
     fn default() -> Self {
         RandomForestClassifierParameters {
             criterion: SplitCriterion::Gini,
-            max_depth: None,
+            max_depth: Option::None,
             min_samples_leaf: 1,
             min_samples_split: 2,
             n_trees: 100,
@@ -183,21 +191,26 @@ impl Default for RandomForestClassifierParameters {
     }
 }
 
-impl<T: RealNumber, M: Matrix<T>>
-    SupervisedEstimator<M, M::RowVector, RandomForestClassifierParameters>
-    for RandomForestClassifier<T>
+impl<TX: Number + FloatNumber + PartialOrd, TY: Number + Ord, X: Array2<TX>, Y: Array1<TY>>
+    SupervisedEstimator<X, Y, RandomForestClassifierParameters>
+    for RandomForestClassifier<TX, TY, X, Y>
 {
-    fn fit(
-        x: &M,
-        y: &M::RowVector,
-        parameters: RandomForestClassifierParameters,
-    ) -> Result<Self, Failed> {
+    fn new() -> Self {
+        Self {
+            trees: Option::None,
+            classes: Option::None,
+            samples: Option::None,
+        }
+    }
+    fn fit(x: &X, y: &Y, parameters: RandomForestClassifierParameters) -> Result<Self, Failed> {
         RandomForestClassifier::fit(x, y, parameters)
     }
 }
 
-impl<T: RealNumber, M: Matrix<T>> Predictor<M, M::RowVector> for RandomForestClassifier<T> {
-    fn predict(&self, x: &M) -> Result<M::RowVector, Failed> {
+impl<TX: Number + FloatNumber + PartialOrd, TY: Number + Ord, X: Array2<TX>, Y: Array1<TY>>
+    Predictor<X, Y> for RandomForestClassifier<TX, TY, X, Y>
+{
+    fn predict(&self, x: &X) -> Result<Y, Failed> {
         self.predict(x)
     }
 }
@@ -430,46 +443,46 @@ impl Default for RandomForestClassifierSearchParameters {
     }
 }
 
-impl<T: RealNumber> RandomForestClassifier<T> {
+impl<TX: FloatNumber + PartialOrd, TY: Number + Ord, X: Array2<TX>, Y: Array1<TY>>
+    RandomForestClassifier<TX, TY, X, Y>
+{
     /// Build a forest of trees from the training set.
     /// * `x` - _NxM_ matrix with _N_ observations and _M_ features in each observation.
     /// * `y` - the target class values
-    pub fn fit<M: Matrix<T>>(
-        x: &M,
-        y: &M::RowVector,
+    pub fn fit(
+        x: &X,
+        y: &Y,
         parameters: RandomForestClassifierParameters,
-    ) -> Result<RandomForestClassifier<T>, Failed> {
+    ) -> Result<RandomForestClassifier<TX, TY, X, Y>, Failed> {
         let (_, num_attributes) = x.shape();
-        let y_m = M::from_row_vector(y.clone());
-        let (_, y_ncols) = y_m.shape();
+        let y_ncols = y.shape();
         let mut yi: Vec<usize> = vec![0; y_ncols];
-        let classes = y_m.unique();
+        let classes = y.unique();
 
         for (i, yi_i) in yi.iter_mut().enumerate().take(y_ncols) {
-            let yc = y_m.get(0, i);
-            *yi_i = classes.iter().position(|c| yc == *c).unwrap();
+            let yc = y.get(i);
+            *yi_i = classes.iter().position(|c| yc == c).unwrap();
         }
 
-        let mtry = parameters.m.unwrap_or_else(|| {
-            (T::from(num_attributes).unwrap())
-                .sqrt()
-                .floor()
-                .to_usize()
-                .unwrap()
-        });
+        let mtry = parameters
+            .m
+            .unwrap_or_else(|| ((num_attributes as f64).sqrt().floor()) as usize);
 
         let mut rng = get_rng_impl(Some(parameters.seed));
-        let classes = y_m.unique();
+        let classes = y.unique();
         let k = classes.len();
-        let mut trees: Vec<DecisionTreeClassifier<T>> = Vec::new();
+        // TODO: use with_capacity here
+        let mut trees: Vec<DecisionTreeClassifier<TX, TY, X, Y>> = Vec::new();
 
         let mut maybe_all_samples: Option<Vec<Vec<bool>>> = Option::None;
         if parameters.keep_samples {
+            // TODO: use with_capacity here
             maybe_all_samples = Some(Vec::new());
         }
 
         for _ in 0..parameters.n_trees {
-            let samples = RandomForestClassifier::<T>::sample_with_replacement(&yi, k, &mut rng);
+            let samples: Vec<usize> =
+                RandomForestClassifier::<TX, TY, X, Y>::sample_with_replacement(&yi, k, &mut rng);
             if let Some(ref mut all_samples) = maybe_all_samples {
                 all_samples.push(samples.iter().map(|x| *x != 0).collect())
             }
@@ -486,31 +499,33 @@ impl<T: RealNumber> RandomForestClassifier<T> {
         }
 
         Ok(RandomForestClassifier {
-            _parameters: parameters,
-            trees,
-            classes,
+            trees: Some(trees),
+            classes: Some(classes),
             samples: maybe_all_samples,
         })
     }
 
     /// Predict class for `x`
     /// * `x` - _KxM_ data where _K_ is number of observations and _M_ is number of features.
-    pub fn predict<M: Matrix<T>>(&self, x: &M) -> Result<M::RowVector, Failed> {
-        let mut result = M::zeros(1, x.shape().0);
+    pub fn predict(&self, x: &X) -> Result<Y, Failed> {
+        let mut result = Y::zeros(x.shape().0);
 
         let (n, _) = x.shape();
 
         for i in 0..n {
-            result.set(0, i, self.classes[self.predict_for_row(x, i)]);
+            result.set(
+                i,
+                self.classes.as_ref().unwrap()[self.predict_for_row(x, i)],
+            );
         }
 
-        Ok(result.to_row_vector())
+        Ok(result)
     }
 
-    fn predict_for_row<M: Matrix<T>>(&self, x: &M, row: usize) -> usize {
-        let mut result = vec![0; self.classes.len()];
+    fn predict_for_row(&self, x: &X, row: usize) -> usize {
+        let mut result = vec![0; self.classes.as_ref().unwrap().len()];
 
-        for tree in self.trees.iter() {
+        for tree in self.trees.as_ref().unwrap().iter() {
             result[tree.predict_for_row(x, row)] += 1;
         }
 
@@ -518,7 +533,7 @@ impl<T: RealNumber> RandomForestClassifier<T> {
     }
 
     /// Predict OOB classes for `x`. `x` is expected to be equal to the dataset used in training.
-    pub fn predict_oob<M: Matrix<T>>(&self, x: &M) -> Result<M::RowVector, Failed> {
+    pub fn predict_oob(&self, x: &X) -> Result<Y, Failed> {
         let (n, _) = x.shape();
         if self.samples.is_none() {
             Err(Failed::because(
@@ -531,20 +546,28 @@ impl<T: RealNumber> RandomForestClassifier<T> {
                 "Prediction matrix must match matrix used in training for OOB predictions.",
             ))
         } else {
-            let mut result = M::zeros(1, n);
+            let mut result = Y::zeros(n);
 
             for i in 0..n {
-                result.set(0, i, self.classes[self.predict_for_row_oob(x, i)]);
+                result.set(
+                    i,
+                    self.classes.as_ref().unwrap()[self.predict_for_row_oob(x, i)],
+                );
             }
-
-            Ok(result.to_row_vector())
+            Ok(result)
         }
     }
 
-    fn predict_for_row_oob<M: Matrix<T>>(&self, x: &M, row: usize) -> usize {
-        let mut result = vec![0; self.classes.len()];
+    fn predict_for_row_oob(&self, x: &X, row: usize) -> usize {
+        let mut result = vec![0; self.classes.as_ref().unwrap().len()];
 
-        for (tree, samples) in self.trees.iter().zip(self.samples.as_ref().unwrap()) {
+        for (tree, samples) in self
+            .trees
+            .as_ref()
+            .unwrap()
+            .iter()
+            .zip(self.samples.as_ref().unwrap())
+        {
             if !samples[row] {
                 result[tree.predict_for_row(x, row)] += 1;
             }
@@ -580,7 +603,7 @@ impl<T: RealNumber> RandomForestClassifier<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::linalg::naive::dense_matrix::DenseMatrix;
+    use crate::linalg::basic::matrix::DenseMatrix;
     use crate::metrics::*;
 
     #[test]
@@ -606,9 +629,12 @@ mod tests {
         assert!(iter.next().is_none());
     }
 
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+    #[cfg_attr(
+        all(target_arch = "wasm32", not(target_os = "wasi")),
+        wasm_bindgen_test::wasm_bindgen_test
+    )]
     #[test]
-    fn fit_predict_iris() {
+    fn fit_predict() {
         let x = DenseMatrix::from_2d_array(&[
             &[5.1, 3.5, 1.4, 0.2],
             &[4.9, 3.0, 1.4, 0.2],
@@ -631,16 +657,14 @@ mod tests {
             &[6.6, 2.9, 4.6, 1.3],
             &[5.2, 2.7, 3.9, 1.4],
         ]);
-        let y = vec![
-            0., 0., 0., 0., 0., 0., 0., 0., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1.,
-        ];
+        let y = vec![0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1];
 
         let classifier = RandomForestClassifier::fit(
             &x,
             &y,
             RandomForestClassifierParameters {
                 criterion: SplitCriterion::Gini,
-                max_depth: None,
+                max_depth: Option::None,
                 min_samples_leaf: 1,
                 min_samples_split: 2,
                 n_trees: 100,
@@ -654,7 +678,10 @@ mod tests {
         assert!(accuracy(&y, &classifier.predict(&x).unwrap()) >= 0.95);
     }
 
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+    #[cfg_attr(
+        all(target_arch = "wasm32", not(target_os = "wasi")),
+        wasm_bindgen_test::wasm_bindgen_test
+    )]
     #[test]
     fn fit_predict_iris_oob() {
         let x = DenseMatrix::from_2d_array(&[
@@ -679,16 +706,14 @@ mod tests {
             &[6.6, 2.9, 4.6, 1.3],
             &[5.2, 2.7, 3.9, 1.4],
         ]);
-        let y = vec![
-            0., 0., 0., 0., 0., 0., 0., 0., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1.,
-        ];
+        let y = vec![0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1];
 
         let classifier = RandomForestClassifier::fit(
             &x,
             &y,
             RandomForestClassifierParameters {
                 criterion: SplitCriterion::Gini,
-                max_depth: None,
+                max_depth: Option::None,
                 min_samples_leaf: 1,
                 min_samples_split: 2,
                 n_trees: 100,
@@ -705,7 +730,10 @@ mod tests {
         );
     }
 
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+    #[cfg_attr(
+        all(target_arch = "wasm32", not(target_os = "wasi")),
+        wasm_bindgen_test::wasm_bindgen_test
+    )]
     #[test]
     #[cfg(feature = "serde")]
     fn serde() {
@@ -731,13 +759,11 @@ mod tests {
             &[6.6, 2.9, 4.6, 1.3],
             &[5.2, 2.7, 3.9, 1.4],
         ]);
-        let y = vec![
-            0., 0., 0., 0., 0., 0., 0., 0., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1.,
-        ];
+        let y = vec![0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1];
 
         let forest = RandomForestClassifier::fit(&x, &y, Default::default()).unwrap();
 
-        let deserialized_forest: RandomForestClassifier<f64> =
+        let deserialized_forest: RandomForestClassifier<f64, i64, DenseMatrix<f64>, Vec<i64>> =
             bincode::deserialize(&bincode::serialize(&forest).unwrap()).unwrap();
 
         assert_eq!(forest, deserialized_forest);

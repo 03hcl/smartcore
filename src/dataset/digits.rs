@@ -1,4 +1,4 @@
-//! # Optical Recognition of Handwritten Digits Data Set
+//! # Optical Recognition of Handwritten Digits Dataset
 //!
 //! | Number of Instances | Number of Attributes | Missing Values? | Associated Tasks: |
 //! |-|-|-|-|
@@ -16,7 +16,7 @@ use crate::dataset::Dataset;
 pub fn load_dataset() -> Dataset<f32, f32> {
     let (x, y, num_samples, num_features) = match deserialize_data(std::include_bytes!("digits.xy"))
     {
-        Err(why) => panic!("Can't deserialize digits.xy. {}", why),
+        Err(why) => panic!("Can't deserialize digits.xy. {why}"),
         Ok((x, y, num_samples, num_features)) => (x, y, num_samples, num_features),
     };
 
@@ -57,7 +57,10 @@ mod tests {
         let dataset = load_dataset();
         assert!(serialize_data(&dataset, "digits.xy").is_ok());
     }
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+    #[cfg_attr(
+        all(target_arch = "wasm32", not(target_os = "wasi")),
+        wasm_bindgen_test::wasm_bindgen_test
+    )]
     #[test]
     fn digits_dataset() {
         let dataset = load_dataset();

@@ -3,8 +3,8 @@
 //! Encode a series of categorical features as a one-hot numeric array.
 
 use crate::error::Failed;
-use crate::linalg::BaseVector;
-use crate::math::num::RealNumber;
+use crate::linalg::basic::arrays::Array1;
+use crate::numbers::realnum::RealNumber;
 use std::collections::HashMap;
 use std::hash::Hash;
 
@@ -132,7 +132,7 @@ where
     pub fn get_one_hot<U, V>(&self, category: &C) -> Option<V>
     where
         U: RealNumber,
-        V: BaseVector<U>,
+        V: Array1<U>,
     {
         self.get_num(category)
             .map(|&idx| make_one_hot::<U, V>(idx, self.num_categories))
@@ -142,15 +142,15 @@ where
     pub fn invert_one_hot<U, V>(&self, one_hot: V) -> Result<C, Failed>
     where
         U: RealNumber,
-        V: BaseVector<U>,
+        V: Array1<U>,
     {
         let pos = U::one();
 
-        let oh_it = (0..one_hot.len()).map(|idx| one_hot.get(idx));
+        let oh_it = (0..one_hot.shape()).map(|idx| one_hot.get(idx));
 
         let s: Vec<usize> = oh_it
             .enumerate()
-            .filter_map(|(idx, v)| if v == pos { Some(idx) } else { None })
+            .filter_map(|(idx, v)| if *v == pos { Some(idx) } else { None })
             .collect();
 
         if s.len() == 1 {
@@ -187,7 +187,7 @@ where
 pub fn make_one_hot<T, V>(category_idx: usize, num_categories: usize) -> V
 where
     T: RealNumber,
-    V: BaseVector<T>,
+    V: Array1<T>,
 {
     let pos = T::one();
     let mut z = V::zeros(num_categories);
@@ -199,11 +199,14 @@ where
 mod tests {
     use super::*;
 
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+    #[cfg_attr(
+        all(target_arch = "wasm32", not(target_os = "wasi")),
+        wasm_bindgen_test::wasm_bindgen_test
+    )]
     #[test]
     fn from_categories() {
         let fake_categories: Vec<usize> = vec![1, 2, 3, 4, 5, 3, 5, 3, 1, 2, 4];
-        let it = fake_categories.iter().map(|&a| a);
+        let it = fake_categories.iter().copied();
         let enc = CategoryMapper::<usize>::fit_to_iter(it);
         let oh_vec: Vec<f64> = match enc.get_one_hot(&1) {
             None => panic!("Wrong categories"),
@@ -215,17 +218,23 @@ mod tests {
 
     fn build_fake_str_enc<'a>() -> CategoryMapper<&'a str> {
         let fake_category_pos = vec!["background", "dog", "cat"];
-        let enc = CategoryMapper::<&str>::from_positional_category_vec(fake_category_pos);
-        enc
+
+        CategoryMapper::<&str>::from_positional_category_vec(fake_category_pos)
     }
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+    #[cfg_attr(
+        all(target_arch = "wasm32", not(target_os = "wasi")),
+        wasm_bindgen_test::wasm_bindgen_test
+    )]
     #[test]
     fn ordinal_encoding() {
         let enc = build_fake_str_enc();
         assert_eq!(1f64, enc.get_ordinal::<f64>(&"dog").unwrap())
     }
 
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+    #[cfg_attr(
+        all(target_arch = "wasm32", not(target_os = "wasi")),
+        wasm_bindgen_test::wasm_bindgen_test
+    )]
     #[test]
     fn category_map_and_vec() {
         let category_map: HashMap<&str, usize> = vec![("background", 0), ("dog", 1), ("cat", 2)]
@@ -240,7 +249,10 @@ mod tests {
         assert_eq!(oh_vec, res);
     }
 
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+    #[cfg_attr(
+        all(target_arch = "wasm32", not(target_os = "wasi")),
+        wasm_bindgen_test::wasm_bindgen_test
+    )]
     #[test]
     fn positional_categories_vec() {
         let enc = build_fake_str_enc();
@@ -252,7 +264,10 @@ mod tests {
         assert_eq!(oh_vec, res);
     }
 
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+    #[cfg_attr(
+        all(target_arch = "wasm32", not(target_os = "wasi")),
+        wasm_bindgen_test::wasm_bindgen_test
+    )]
     #[test]
     fn invert_label_test() {
         let enc = build_fake_str_enc();
@@ -260,12 +275,15 @@ mod tests {
         let lab = enc.invert_one_hot(res).unwrap();
         assert_eq!(lab, "dog");
         if let Err(e) = enc.invert_one_hot(vec![0.0, 0.0, 0.0]) {
-            let pos_entries = format!("Expected a single positive entry, 0 entires found");
+            let pos_entries = "Expected a single positive entry, 0 entires found".to_string();
             assert_eq!(e, Failed::transform(&pos_entries[..]));
         };
     }
 
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+    #[cfg_attr(
+        all(target_arch = "wasm32", not(target_os = "wasi")),
+        wasm_bindgen_test::wasm_bindgen_test
+    )]
     #[test]
     fn test_many_categorys() {
         let enc = build_fake_str_enc();

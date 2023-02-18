@@ -31,7 +31,7 @@ use crate::dataset::Dataset;
 pub fn load_dataset() -> Dataset<f32, f32> {
     let (x, y, num_samples, num_features) = match deserialize_data(std::include_bytes!("boston.xy"))
     {
-        Err(why) => panic!("Can't deserialize boston.xy. {}", why),
+        Err(why) => panic!("Can't deserialize boston.xy. {why}"),
         Ok((x, y, num_samples, num_features)) => (x, y, num_samples, num_features),
     };
 
@@ -69,7 +69,10 @@ mod tests {
         assert!(serialize_data(&dataset, "boston.xy").is_ok());
     }
 
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+    #[cfg_attr(
+        all(target_arch = "wasm32", not(target_os = "wasi")),
+        wasm_bindgen_test::wasm_bindgen_test
+    )]
     #[test]
     fn boston_dataset() {
         let dataset = load_dataset();

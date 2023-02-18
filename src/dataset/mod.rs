@@ -1,6 +1,6 @@
 //! Datasets
 //!
-//! In this module you will find small datasets that are used in SmartCore for demonstration purpose mostly.
+//! In this module you will find small datasets that are used in `smartcore` mostly for demonstration purposes.
 pub mod boston;
 pub mod breast_cancer;
 pub mod diabetes;
@@ -9,7 +9,7 @@ pub mod generator;
 pub mod iris;
 
 #[cfg(not(target_arch = "wasm32"))]
-use crate::math::num::RealNumber;
+use crate::numbers::{basenum::Number, realnum::RealNumber};
 #[cfg(not(target_arch = "wasm32"))]
 use std::fs::File;
 use std::io;
@@ -55,7 +55,7 @@ impl<X, Y> Dataset<X, Y> {
 // Running this in wasm throws: operation not supported on this platform.
 #[cfg(not(target_arch = "wasm32"))]
 #[allow(dead_code)]
-pub(crate) fn serialize_data<X: RealNumber, Y: RealNumber>(
+pub(crate) fn serialize_data<X: Number + RealNumber, Y: RealNumber>(
     dataset: &Dataset<X, Y>,
     filename: &str,
 ) -> Result<(), io::Error> {
@@ -78,7 +78,7 @@ pub(crate) fn serialize_data<X: RealNumber, Y: RealNumber>(
                 .collect();
             file.write_all(&y)?;
         }
-        Err(why) => panic!("couldn't create {}: {}", filename, why),
+        Err(why) => panic!("couldn't create {filename}: {why}"),
     }
     Ok(())
 }
@@ -121,7 +121,10 @@ pub(crate) fn deserialize_data(
 mod tests {
     use super::*;
 
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+    #[cfg_attr(
+        all(target_arch = "wasm32", not(target_os = "wasi")),
+        wasm_bindgen_test::wasm_bindgen_test
+    )]
     #[test]
     fn as_matrix() {
         let dataset = Dataset {
