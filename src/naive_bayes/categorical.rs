@@ -32,7 +32,7 @@
 //! ```
 use std::fmt;
 
-use num_traits::Unsigned;
+// use num_traits::Unsigned;
 
 use crate::api::{Predictor, SupervisedEstimator};
 use crate::error::Failed;
@@ -45,7 +45,7 @@ use serde::{Deserialize, Serialize};
 /// Naive Bayes classifier for categorical features
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone)]
-struct CategoricalNBDistribution<T: Number + Unsigned> {
+struct CategoricalNBDistribution<T: Number> {
     /// number of training samples observed in each class
     class_count: Vec<usize>,
     /// class labels known to the classifier
@@ -63,7 +63,7 @@ struct CategoricalNBDistribution<T: Number + Unsigned> {
     category_count: Vec<Vec<Vec<usize>>>,
 }
 
-impl<T: Number + Ord + Unsigned> fmt::Display for CategoricalNBDistribution<T> {
+impl<T: Number + Ord> fmt::Display for CategoricalNBDistribution<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(
             f,
@@ -75,7 +75,7 @@ impl<T: Number + Ord + Unsigned> fmt::Display for CategoricalNBDistribution<T> {
     }
 }
 
-impl<T: Number + Unsigned> PartialEq for CategoricalNBDistribution<T> {
+impl<T: Number> PartialEq for CategoricalNBDistribution<T> {
     fn eq(&self, other: &Self) -> bool {
         if self.class_labels == other.class_labels
             && self.class_priors == other.class_priors
@@ -108,7 +108,7 @@ impl<T: Number + Unsigned> PartialEq for CategoricalNBDistribution<T> {
     }
 }
 
-impl<T: Number + Unsigned> NBDistribution<T, T> for CategoricalNBDistribution<T> {
+impl<T: Number> NBDistribution<T, T> for CategoricalNBDistribution<T> {
     fn prior(&self, class_index: usize) -> f64 {
         if class_index >= self.class_labels.len() {
             0f64
@@ -139,7 +139,7 @@ impl<T: Number + Unsigned> NBDistribution<T, T> for CategoricalNBDistribution<T>
     }
 }
 
-impl<T: Number + Unsigned, X: Array2<T>, Y: Array1<T>> fmt::Display for CategoricalNB<T, X, Y> {
+impl<T: Number, X: Array2<T>, Y: Array1<T>> fmt::Display for CategoricalNB<T, X, Y> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(
             f,
@@ -150,7 +150,7 @@ impl<T: Number + Unsigned, X: Array2<T>, Y: Array1<T>> fmt::Display for Categori
     }
 }
 
-impl<T: Number + Unsigned> CategoricalNBDistribution<T> {
+impl<T: Number> CategoricalNBDistribution<T> {
     /// Fits the distribution to a NxM matrix where N is number of samples and M is number of features.
     /// * `x` - training data.
     /// * `y` - vector with target values (classes) of length N.
@@ -336,11 +336,11 @@ impl Default for CategoricalNBSearchParameters {
 /// CategoricalNB implements the categorical naive Bayes algorithm for categorically distributed data.
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Debug, PartialEq)]
-pub struct CategoricalNB<T: Number + Unsigned, X: Array2<T>, Y: Array1<T>> {
+pub struct CategoricalNB<T: Number, X: Array2<T>, Y: Array1<T>> {
     inner: Option<BaseNaiveBayes<T, T, X, Y, CategoricalNBDistribution<T>>>,
 }
 
-impl<T: Number + Unsigned, X: Array2<T>, Y: Array1<T>>
+impl<T: Number, X: Array2<T>, Y: Array1<T>>
     SupervisedEstimator<X, Y, CategoricalNBParameters> for CategoricalNB<T, X, Y>
 {
     fn new() -> Self {
@@ -354,13 +354,13 @@ impl<T: Number + Unsigned, X: Array2<T>, Y: Array1<T>>
     }
 }
 
-impl<T: Number + Unsigned, X: Array2<T>, Y: Array1<T>> Predictor<X, Y> for CategoricalNB<T, X, Y> {
+impl<T: Number, X: Array2<T>, Y: Array1<T>> Predictor<X, Y> for CategoricalNB<T, X, Y> {
     fn predict(&self, x: &X) -> Result<Y, Failed> {
         self.predict(x)
     }
 }
 
-impl<T: Number + Unsigned, X: Array2<T>, Y: Array1<T>> CategoricalNB<T, X, Y> {
+impl<T: Number, X: Array2<T>, Y: Array1<T>> CategoricalNB<T, X, Y> {
     /// Fits CategoricalNB with given data
     /// * `x` - training data of size NxM where N is the number of samples and M is the number of
     /// features.
@@ -383,8 +383,8 @@ impl<T: Number + Unsigned, X: Array2<T>, Y: Array1<T>> CategoricalNB<T, X, Y> {
     /// Estimates the probablities of each class labels for the provided data.
     /// * `x` - data of shape NxM where N is number of data points to estimate and M is number of features.
     /// Returns a 2d vector of shape (N, n_classes).
-    pub fn predict_probs(&self, x: &M) -> Result<(&Vec<T>, M), Failed> {
-        self.inner.predict_probs(x)
+    pub fn predict_probs(&self, x: &X) -> Result<(&Vec<T>, Vec<Vec<f64>>), Failed> {
+        self.inner.as_ref().unwrap().predict_probs(x)
     }
 
     /// Class labels known to the classifier.
@@ -401,8 +401,8 @@ impl<T: Number + Unsigned, X: Array2<T>, Y: Array1<T>> CategoricalNB<T, X, Y> {
 
     /// probability of each class.
     /// Returns a vector of size n_classes.
-    pub fn class_priors(&self) -> &Vec<T> {
-        &self.inner.distribution.class_priors
+    pub fn class_priors(&self) -> &Vec<f64> {
+        &self.inner.as_ref().unwrap().distribution.class_priors
     }
 
     /// Number of features of each sample
